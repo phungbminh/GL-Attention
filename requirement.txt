@@ -1,0 +1,17 @@
+numpy
+torch
+torchvision
+Pillow
+click
+opencv-python
+matplotlib
+tqdm
+tensorboardX
+torchnet
+pretrainedmodels
+pytorchcv
+gdown
+wandb
+scikit-learn
+seaborn
+pandas
