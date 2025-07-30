@@ -244,8 +244,8 @@ class DatasetTrainer(Trainer):
             total=len(self.train_loader),
             desc=f"Epoch {epoch}/{self.max_epochs} [Training]",
             leave=False,
-            ncols=100,
-            disable=self.verbose  # Disable progress bar when verbose logging is on
+            ncols=120 if self.verbose else 100,
+            disable=False  # Always show progress bar
         )
         
         for batch_idx, (images, labels) in pbar:
@@ -280,8 +280,19 @@ class DatasetTrainer(Trainer):
             batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
             current_lr = self.optimizer.param_groups[0]['lr']
             
-            # Update progress bar with current metrics (only if not verbose)
-            if not self.verbose:
+            # Update progress bar with current metrics
+            if self.verbose:
+                # Verbose mode: show more detailed info
+                pbar.set_postfix({
+                    'Batch': f'{batch_idx+1}/{len(self.train_loader)}',
+                    'Loss': f'{batch_loss:.4f}',
+                    'Acc': f'{batch_acc:.1f}%',
+                    'Avg_Loss': f'{running_loss/(batch_idx+1):.4f}',
+                    'Avg_Acc': f'{100.0*correct/total:.1f}%',
+                    'LR': f'{current_lr:.2e}'
+                })
+            else:
+                # Normal mode: compact info
                 pbar.set_postfix({
                     'Loss': f'{batch_loss:.4f}',
                     'Acc': f'{batch_acc:.1f}%',
@@ -313,8 +324,8 @@ class DatasetTrainer(Trainer):
                 total=len(self.val_loader),
                 desc=f"Epoch {epoch}/{self.max_epochs} [Validation]",
                 leave=False,
-                ncols=100,
-                disable=self.verbose  # Disable progress bar when verbose logging is on
+                ncols=120 if self.verbose else 100,
+                disable=False  # Always show progress bar
             )
             
             for batch_idx, (images, labels) in val_pbar:
@@ -334,8 +345,18 @@ class DatasetTrainer(Trainer):
                 batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
                 current_lr = self.optimizer.param_groups[0]['lr']
                 
-                # Update validation progress bar (only if not verbose)
-                if not self.verbose:
+                # Update validation progress bar
+                if self.verbose:
+                    # Verbose mode: show more detailed info
+                    val_pbar.set_postfix({
+                        'Batch': f'{batch_idx+1}/{len(self.val_loader)}',
+                        'Loss': f'{batch_loss:.4f}',
+                        'Acc': f'{batch_acc:.1f}%',
+                        'Avg_Loss': f'{val_loss/(batch_idx+1):.4f}',
+                        'Avg_Acc': f'{100.0*correct/total:.1f}%'
+                    })
+                else:
+                    # Normal mode: compact info
                     val_pbar.set_postfix({
                         'Loss': f'{batch_loss:.4f}',
                         'Acc': f'{batch_acc:.1f}%'
