@@ -244,7 +244,8 @@ class DatasetTrainer(Trainer):
             total=len(self.train_loader),
             desc=f"Epoch {epoch}/{self.max_epochs} [Training]",
             leave=False,
-            ncols=100
+            ncols=100,
+            disable=self.verbose  # Disable progress bar when verbose logging is on
         )
         
         for batch_idx, (images, labels) in pbar:
@@ -279,12 +280,13 @@ class DatasetTrainer(Trainer):
             batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
             current_lr = self.optimizer.param_groups[0]['lr']
             
-            # Update progress bar with current metrics
-            pbar.set_postfix({
-                'Loss': f'{batch_loss:.4f}',
-                'Acc': f'{batch_acc:.1f}%',
-                'LR': f'{current_lr:.2e}'
-            })
+            # Update progress bar with current metrics (only if not verbose)
+            if not self.verbose:
+                pbar.set_postfix({
+                    'Loss': f'{batch_loss:.4f}',
+                    'Acc': f'{batch_acc:.1f}%',
+                    'LR': f'{current_lr:.2e}'
+                })
             
             self.logger.log_batch(epoch, batch_idx, len(self.train_loader), 
                                 batch_loss, batch_acc, current_lr, phase="train", verbose=self.verbose)
@@ -311,7 +313,8 @@ class DatasetTrainer(Trainer):
                 total=len(self.val_loader),
                 desc=f"Epoch {epoch}/{self.max_epochs} [Validation]",
                 leave=False,
-                ncols=100
+                ncols=100,
+                disable=self.verbose  # Disable progress bar when verbose logging is on
             )
             
             for batch_idx, (images, labels) in val_pbar:
@@ -331,10 +334,12 @@ class DatasetTrainer(Trainer):
                 batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
                 current_lr = self.optimizer.param_groups[0]['lr']
                 
-                val_pbar.set_postfix({
-                    'Loss': f'{batch_loss:.4f}',
-                    'Acc': f'{batch_acc:.1f}%'
-                })
+                # Update validation progress bar (only if not verbose)
+                if not self.verbose:
+                    val_pbar.set_postfix({
+                        'Loss': f'{batch_loss:.4f}',
+                        'Acc': f'{batch_acc:.1f}%'
+                    })
                 
                 self.logger.log_batch(epoch, batch_idx, len(self.val_loader), 
                                     batch_loss, batch_acc, current_lr, phase="val", verbose=self.verbose)
