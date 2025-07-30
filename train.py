@@ -117,7 +117,7 @@ def main():
     logger.info(f"Using device: {device}")
     
     # Print system info for debugging
-    print(f"💻 System Info:")
+    print(f"System Info:")
     print(f"   Device: {device}")
     print(f"   Batch size: {args.batch_size}")
     print(f"   Num workers: {args.num_workers}")
@@ -127,22 +127,22 @@ def main():
 
     # Initialize train and test datasets
     logger.info("Loading dataset...")
-    print(f"📂 Loading {args.dataset} dataset...")
+    print(f"Loading {args.dataset} dataset...")
     dataset = GeneralDataset(args.dataset, args.dataset_path)
     
-    print("🔄 Creating train/validation splits...")
+    print("Creating train/validation splits...")
     train_dataset, test_dataset = dataset.get_splits(val_size=0.2, seed=args.random_seed, image_size=args.image_size)
 
     # Log dataset information
     logger.log_dataset_info(len(train_dataset), 0, len(test_dataset), dataset.num_classes)
 
     # Create weighted sampler for handling class imbalance
-    print("⚖️  Creating WeightedRandomSampler for class balance...")
+    print("Creating WeightedRandomSampler for class balance...")
     train_sampler = train_dataset.get_sampler(method='sqrt')
     logger.info("Using WeightedRandomSampler with sqrt weighting for class balance")
 
     # DataLoader with weighted sampler
-    print("🔧 Setting up data loaders...")
+    print("Setting up data loaders...")
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -164,7 +164,7 @@ def main():
         num_workers=args.num_workers
     )
     # Create model with unified backbone system
-    print(f"🧠 Creating {args.backbone} model with {args.attention} attention...")
+    print(f"Creating {args.backbone} model with {args.attention} attention...")
     logger.info(f"Creating {args.backbone} model with {args.attention} attention...")
     
     model = create_model(
@@ -177,7 +177,7 @@ def main():
         num_heads=8,
         reduction_ratio=16
     )
-    print("✅ Model created successfully!")
+    print("Model created successfully!")
     
     # Log model information
     logger.log_model_info(model)
@@ -215,14 +215,14 @@ def main():
     }
     if model is not None:
         # Initialize trainer
-        print("🏋️‍♂️ Initializing trainer...")
+        print("Initializing trainer...")
         logger.info("Initializing trainer...")
         trainer = DatasetTrainer(model, train_loader, test_loader, test_loader, configs, wb=True, logger=logger, verbose=args.verbose)
         
         # Start training
-        print("🚀 Starting training process...")
+        print("Starting training process...")
         trainer.train()
-        print("🎉 Training completed successfully!")
+        print("Training completed successfully!")
         logger.info("Training completed successfully!")
     else:
         logger.error("Model creation failed!")

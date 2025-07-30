@@ -130,8 +130,12 @@ class ProjectLogger:
         metrics_msg = f"BATCH,{epoch},{batch_idx},{phase},{loss:.4f},{acc:.2f},{lr:.6f}"
         self.metrics_logger.info(metrics_msg)
         
-        # Only log to console if verbose or specific intervals
-        if verbose and (batch_idx % 10 == 0 or batch_idx == total_batches - 1):
+        # Console logging: completely disabled for verbose mode
+        if verbose:
+            return  # No console logging in verbose mode - progress bar handles this
+            
+        # Only log milestone batches (every 100 batches) in non-verbose mode
+        if batch_idx % 100 == 0 or batch_idx == total_batches - 1:
             progress = (batch_idx + 1) / total_batches * 100
             self.info(f"  Batch {batch_idx + 1}/{total_batches} ({progress:.1f}%) | "
                      f"Loss: {loss:.4f} | Acc: {acc:.2f}% | LR: {lr:.6f}")

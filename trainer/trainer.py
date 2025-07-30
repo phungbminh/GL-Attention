@@ -235,8 +235,8 @@ class DatasetTrainer(Trainer):
             
         # Show waiting message for first epoch
         if epoch == 1:
-            print("⏳ Loading first batch (may take 30-60 seconds on CPU)...")
-            print("💡 Tip: Use GPU or reduce --batch_size for faster training")
+            print("Loading first batch (may take 30-60 seconds on CPU)...")
+            print("Tip: Use GPU or reduce --batch_size for faster training")
             first_batch_start = time.time()
 
         pbar = tqdm(
@@ -244,7 +244,7 @@ class DatasetTrainer(Trainer):
             total=len(self.train_loader),
             desc=f"Epoch {epoch}/{self.max_epochs} [Training]",
             leave=False,
-            ncols=120 if self.verbose else 100,
+            ncols=140 if self.verbose else 100,
             disable=False  # Always show progress bar
         )
         
@@ -253,9 +253,9 @@ class DatasetTrainer(Trainer):
             if epoch == 1 and batch_idx == 0:
                 if 'first_batch_start' in locals():
                     load_time = time.time() - first_batch_start
-                    print(f"✅ First batch loaded in {load_time:.1f}s! Training started...")
+                    print(f"First batch loaded in {load_time:.1f}s! Training started...")
                 else:
-                    print("✅ First batch loaded successfully! Training started...")
+                    print("First batch loaded successfully! Training started...")
                 
             images, labels = images.to(self.device), labels.to(self.device)
 
@@ -282,14 +282,13 @@ class DatasetTrainer(Trainer):
             
             # Update progress bar with current metrics
             if self.verbose:
-                # Verbose mode: show more detailed info
+                # Verbose mode: show detailed info with shorter keys
                 pbar.set_postfix({
-                    'Batch': f'{batch_idx+1}/{len(self.train_loader)}',
-                    'Loss': f'{batch_loss:.4f}',
-                    'Acc': f'{batch_acc:.1f}%',
-                    'Avg_Loss': f'{running_loss/(batch_idx+1):.4f}',
-                    'Avg_Acc': f'{100.0*correct/total:.1f}%',
-                    'LR': f'{current_lr:.2e}'
+                    'L': f'{batch_loss:.4f}',
+                    'A': f'{batch_acc:.1f}%',
+                    'AvgL': f'{running_loss/(batch_idx+1):.4f}',
+                    'AvgA': f'{100.0*correct/total:.1f}%',
+                    'LR': f'{current_lr:.1e}'
                 })
             else:
                 # Normal mode: compact info
@@ -324,7 +323,7 @@ class DatasetTrainer(Trainer):
                 total=len(self.val_loader),
                 desc=f"Epoch {epoch}/{self.max_epochs} [Validation]",
                 leave=False,
-                ncols=120 if self.verbose else 100,
+                ncols=140 if self.verbose else 100,
                 disable=False  # Always show progress bar
             )
             
@@ -347,13 +346,12 @@ class DatasetTrainer(Trainer):
                 
                 # Update validation progress bar
                 if self.verbose:
-                    # Verbose mode: show more detailed info
+                    # Verbose mode: show detailed info with shorter keys
                     val_pbar.set_postfix({
-                        'Batch': f'{batch_idx+1}/{len(self.val_loader)}',
-                        'Loss': f'{batch_loss:.4f}',
-                        'Acc': f'{batch_acc:.1f}%',
-                        'Avg_Loss': f'{val_loss/(batch_idx+1):.4f}',
-                        'Avg_Acc': f'{100.0*correct/total:.1f}%'
+                        'L': f'{batch_loss:.4f}',
+                        'A': f'{batch_acc:.1f}%',
+                        'AvgL': f'{val_loss/(batch_idx+1):.4f}',
+                        'AvgA': f'{100.0*correct/total:.1f}%'
                     })
                 else:
                     # Normal mode: compact info
@@ -419,7 +417,7 @@ class DatasetTrainer(Trainer):
         self.logger.log_training_start(self.max_epochs, self.optimizer, self.scheduler)
         
         # Show initialization progress
-        print("🚀 Initializing training components...")
+        print("Initializing training components...")
         init_pbar = tqdm(total=4, desc="Training Setup", ncols=80)
         
         init_pbar.set_description("Setting up data loaders...")
@@ -435,7 +433,7 @@ class DatasetTrainer(Trainer):
         init_pbar.update(1)
         init_pbar.close()
         
-        print("✅ Setup complete! Starting training...\n")
+        print("Setup complete! Starting training...\n")
         training_start_time = time.time()
 
         early_stopper = EarlyStopping(patience=self.early_stopping_patience)
@@ -456,7 +454,7 @@ class DatasetTrainer(Trainer):
             
             # Show data loading preparation
             if epoch == 1:
-                print("📊 Preparing first batch (this may take a moment)...")
+                print("Preparing first batch (this may take a moment)...")
                 data_prep_pbar = tqdm(total=3, desc="Data Preparation", ncols=80, leave=False)
                 
                 data_prep_pbar.set_description("Loading first batch...")
