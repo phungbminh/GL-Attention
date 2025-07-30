@@ -280,23 +280,24 @@ class DatasetTrainer(Trainer):
             batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
             current_lr = self.optimizer.param_groups[0]['lr']
             
-            # Update progress bar with current metrics
-            if self.verbose:
-                # Verbose mode: show detailed info with shorter keys
-                pbar.set_postfix({
-                    'L': f'{batch_loss:.4f}',
-                    'A': f'{batch_acc:.1f}%',
-                    'AvgL': f'{running_loss/(batch_idx+1):.4f}',
-                    'AvgA': f'{100.0*correct/total:.1f}%',
-                    'LR': f'{current_lr:.1e}'
-                })
-            else:
-                # Normal mode: compact info
-                pbar.set_postfix({
-                    'Loss': f'{batch_loss:.4f}',
-                    'Acc': f'{batch_acc:.1f}%',
-                    'LR': f'{current_lr:.2e}'
-                })
+            # Update progress bar with current metrics (throttled to avoid spam)
+            if batch_idx % 5 == 0 or batch_idx == len(self.train_loader) - 1:
+                if self.verbose:
+                    # Verbose mode: show detailed info with shorter keys
+                    pbar.set_postfix({
+                        'L': f'{batch_loss:.4f}',
+                        'A': f'{batch_acc:.1f}%',
+                        'AvgL': f'{running_loss/(batch_idx+1):.4f}',
+                        'AvgA': f'{100.0*correct/total:.1f}%',
+                        'LR': f'{current_lr:.1e}'
+                    })
+                else:
+                    # Normal mode: compact info
+                    pbar.set_postfix({
+                        'Loss': f'{batch_loss:.4f}',
+                        'Acc': f'{batch_acc:.1f}%',
+                        'LR': f'{current_lr:.2e}'
+                    })
             
             self.logger.log_batch(epoch, batch_idx, len(self.train_loader), 
                                 batch_loss, batch_acc, current_lr, phase="train", verbose=self.verbose)
@@ -344,21 +345,22 @@ class DatasetTrainer(Trainer):
                 batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
                 current_lr = self.optimizer.param_groups[0]['lr']
                 
-                # Update validation progress bar
-                if self.verbose:
-                    # Verbose mode: show detailed info with shorter keys
-                    val_pbar.set_postfix({
-                        'L': f'{batch_loss:.4f}',
-                        'A': f'{batch_acc:.1f}%',
-                        'AvgL': f'{val_loss/(batch_idx+1):.4f}',
-                        'AvgA': f'{100.0*correct/total:.1f}%'
-                    })
-                else:
-                    # Normal mode: compact info
-                    val_pbar.set_postfix({
-                        'Loss': f'{batch_loss:.4f}',
-                        'Acc': f'{batch_acc:.1f}%'
-                    })
+                # Update validation progress bar (throttled to avoid spam)
+                if batch_idx % 5 == 0 or batch_idx == len(self.val_loader) - 1:
+                    if self.verbose:
+                        # Verbose mode: show detailed info with shorter keys
+                        val_pbar.set_postfix({
+                            'L': f'{batch_loss:.4f}',
+                            'A': f'{batch_acc:.1f}%',
+                            'AvgL': f'{val_loss/(batch_idx+1):.4f}',
+                            'AvgA': f'{100.0*correct/total:.1f}%'
+                        })
+                    else:
+                        # Normal mode: compact info
+                        val_pbar.set_postfix({
+                            'Loss': f'{batch_loss:.4f}',
+                            'Acc': f'{batch_acc:.1f}%'
+                        })
                 
                 self.logger.log_batch(epoch, batch_idx, len(self.val_loader), 
                                     batch_loss, batch_acc, current_lr, phase="val", verbose=self.verbose)
