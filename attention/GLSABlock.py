@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 from .CBAM import CBAMBlock
-from .BAM import BAMBlock
-from .scSE import scSEBlock
 from .fusion_strategies import create_fusion_strategy, create_residual_strategy
 
 class GLSABlock(nn.Module):
@@ -13,7 +11,7 @@ class GLSABlock(nn.Module):
     - residual + LayerNorm
     - followed by one of {CBAM, BAM, scSE}
     """
-    def __init__(self, channels, num_heads=8, attn_type='cbam', reduction_ratio=16, kernel_size=7,
+    def __init__(self, channels, num_heads=8, attn_type='CBAM', reduction_ratio=16, kernel_size=7,
                  fusion_strategy='original', residual_strategy='original', 
                  fusion_kwargs=None, residual_kwargs=None):
         super().__init__()
@@ -30,15 +28,13 @@ class GLSABlock(nn.Module):
                                          bias=False)
         self.norm = nn.LayerNorm(channels)
         
-        # Local attention mechanism  
+        # Local attention mechanism (only CBAM supported)
         if attn_type == 'CBAM':
-            self.attn2 = CBAMBlock(channel=channels, reduction=reduction_ratio, kernel_size=7)
-        elif attn_type == 'BAM':
-            self.attn2 = BAMBlock(channel=channels, reduction=reduction_ratio)
-        elif attn_type == 'scSE':
-            self.attn2 = scSEBlock(channel=channels, reduction_ratio=reduction_ratio)
+            self.attn2 = CBAMBlock(channel=channels, reduction=reduction_ratio, kernel_size=kernel_size)
+        elif attn_type == 'none':
+            self.attn2 = nn.Identity()
         else:
-            raise ValueError(f"Unknown attn_type: {attn_type}")
+            raise ValueError(f"Unsupported attn_type: {attn_type}. Only 'CBAM' and 'none' are supported.")
         
         # Configurable fusion strategy
         fusion_kwargs = fusion_kwargs or {}

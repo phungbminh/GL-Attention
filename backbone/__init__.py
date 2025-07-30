@@ -1,7 +1,8 @@
-from .ResNet import ResNet18
-from .VGG import VGG16
+from .models import BackboneWithGLSA, create_model, SUPPORTED_BACKBONES, get_model_info
 
 __all__ = [
-    "ResNet18",
-    "VGG16",
+    "BackboneWithGLSA",
+    "create_model", 
+    "SUPPORTED_BACKBONES",
+    "get_model_info",
 ]

@@ -1,9 +1,7 @@
 import argparse
 import torch
 from trainer import DatasetTrainer
-from backbone import ResNet18, VGG16
-from attention import CBAMBlock, BAMBlock, scSEBlock
-from attention.GLSABlock import GLSABlock
+from backbone.models import create_model, SUPPORTED_BACKBONES
 from datasets import GeneralDataset
 from torch.utils.data import DataLoader
 from torchvision.models import vgg16
@@ -32,16 +30,16 @@ def parse_arguments():
 
     # Dataset and model arguments  
     parser.add_argument("--dataset", type=str, default="HAM10000",
-                        choices=["STL10", "Caltech101", "Caltech256", "Oxford-IIIT Pets", "HAM10000", "isic-2018-task-3"],
-                        help="Choose dataset to train on (default: STL10)")
+                        choices=["HAM10000", "isic-2018-task-3"],
+                        help="Choose medical imaging dataset (default: HAM10000)")
     parser.add_argument("--image_size", type=int, default=224,
                         help="Image size for resizing (default: 224)")
-    parser.add_argument("--backbone", type=str, default="VGG16",
-                        choices=["VGG16", "ResNet18"],
-                        help="Choose the backbone model (default: VGG16)")
+    parser.add_argument("--backbone", type=str, default="resnet18",
+                        choices=SUPPORTED_BACKBONES,
+                        help="Choose the backbone model (default: resnet18)")
     parser.add_argument("--attention", type=str, default="CBAM",
-                        choices=["CBAM", "BAM", "scSE", "none"],
-                        help="Choose an attention mechanism or none (default: CBAM)")
+                        choices=["CBAM", "none"],
+                        help="Choose attention mechanism: CBAM or none (default: CBAM)")
     parser.add_argument("--fusion_strategy", type=str, default="original",
                         choices=["original", "learnable_gate", "weighted_add", "channel_attn", "spatial_attn", "cross_attn"],
                         help="Choose fusion strategy for GLSA block (default: original)")
@@ -84,6 +82,15 @@ def parse_arguments():
                         help="Path to save the best model (default: best_model.pth)")
     parser.add_argument("--verbose", action="store_true",
                         help="Enable verbose logging (show batch-level metrics)")
+    
+    # Loss function arguments
+    parser.add_argument("--loss_type", type=str, default="focal",
+                        choices=["focal", "cross_entropy", "class_balanced", "label_smoothing"],
+                        help="Loss function type (default: focal)")
+    parser.add_argument("--focal_alpha", type=float, default=0.25,
+                        help="Focal loss alpha parameter (default: 0.25)")
+    parser.add_argument("--focal_gamma", type=float, default=2.0,
+                        help="Focal loss gamma parameter (default: 2.0)")
 
     return parser.parse_args()
 
@@ -108,30 +115,34 @@ def main():
     # Set device
     device = args.device if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
+    
+    # Print system info for debugging
+    print(f"💻 System Info:")
+    print(f"   Device: {device}")
+    print(f"   Batch size: {args.batch_size}")
+    print(f"   Num workers: {args.num_workers}")
+    print(f"   Image size: {args.image_size}x{args.image_size}")
+    print(f"   Max epochs: {args.max_epoch}")
+    print()
 
     # Initialize train and test datasets
     logger.info("Loading dataset...")
+    print(f"📂 Loading {args.dataset} dataset...")
     dataset = GeneralDataset(args.dataset, args.dataset_path)
+    
+    print("🔄 Creating train/validation splits...")
     train_dataset, test_dataset = dataset.get_splits(val_size=0.2, seed=args.random_seed, image_size=args.image_size)
 
     # Log dataset information
     logger.log_dataset_info(len(train_dataset), 0, len(test_dataset), dataset.num_classes)
 
-    # Lấy danh sách nhãn từ train_ds
-    train_labels = [train_dataset.lbls[i] for i in range(len(train_dataset))]
+    # Create weighted sampler for handling class imbalance
+    print("⚖️  Creating WeightedRandomSampler for class balance...")
+    train_sampler = train_dataset.get_sampler(method='sqrt')
+    logger.info("Using WeightedRandomSampler with sqrt weighting for class balance")
 
-    class_counts = np.bincount(train_labels, minlength=train_dataset.num_classes)
-    class_weights = 1.0 / class_counts
-
-    sample_weights = [class_weights[label] for label in train_labels]
-
-    train_sampler = WeightedRandomSampler(
-        weights=sample_weights,
-        num_samples=len(sample_weights),  # = len(train_ds)
-        replacement=True
-    )
-
-    # DataLoader cho train với sampler
+    # DataLoader with weighted sampler
+    print("🔧 Setting up data loaders...")
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
@@ -152,43 +163,25 @@ def main():
         shuffle=False,
         num_workers=args.num_workers
     )
-     # Select backbone model
-    logger.info("Creating model...")
-    model = None
-    if args.backbone == "VGG16":
-        model = VGG16(pretrained=args.pre_train, attn_type=args.attention, num_heads=8, num_classes=dataset.num_classes)
-        # Replace with configurable GLSA block if attention is enabled and using non-original strategies
-        if args.attention != 'none' and (args.fusion_strategy != 'original' or args.residual_strategy != 'original'):
-            # Get VGG16 feature channels (assuming layer before classifier)
-            channels = 512  # VGG16 last conv layer channels
-            configurable_block = GLSABlock(
-                channels=channels,
-                attn_type=args.attention,
-                fusion_strategy=args.fusion_strategy,
-                residual_strategy=args.residual_strategy
-            )
-            model.mha_block = configurable_block
-            logger.info(f"Using configurable GLSA block with fusion: {args.fusion_strategy}, residual: {args.residual_strategy}")
-    elif args.backbone == "ResNet18":
-        model = ResNet18(pretrained=args.pre_train, attn_type=args.attention, num_heads=8, num_classes=dataset.num_classes)
-        # Replace with configurable GLSA block if attention is enabled and using non-original strategies
-        if args.attention != 'none' and (args.fusion_strategy != 'original' or args.residual_strategy != 'original'):
-            # Get ResNet18 layer3 channels
-            from torchvision.models import resnet18
-            backbone = resnet18()
-            channels = backbone.layer3[-1].conv2.out_channels  # 256 for ResNet18
-            
-            configurable_block = GLSABlock(
-                channels=channels,
-                attn_type=args.attention,
-                fusion_strategy=args.fusion_strategy,
-                residual_strategy=args.residual_strategy
-            )
-            model.mha_block = configurable_block
-            logger.info(f"Using configurable GLSA block with fusion: {args.fusion_strategy}, residual: {args.residual_strategy}")
+    # Create model with unified backbone system
+    print(f"🧠 Creating {args.backbone} model with {args.attention} attention...")
+    logger.info(f"Creating {args.backbone} model with {args.attention} attention...")
+    
+    model = create_model(
+        backbone_name=args.backbone,
+        pretrained=args.pre_train,
+        num_classes=dataset.num_classes,
+        attn_type=args.attention,
+        fusion_strategy=args.fusion_strategy,
+        residual_strategy=args.residual_strategy,
+        num_heads=8,
+        reduction_ratio=16
+    )
+    print("✅ Model created successfully!")
     
     # Log model information
     logger.log_model_info(model)
+    logger.info(f"Feature channels at GLSA integration: {model.get_feature_channels()}")
     
     # Log fusion strategy if using non-original
     if args.fusion_strategy != 'original' or args.residual_strategy != 'original':
@@ -215,13 +208,21 @@ def main():
         # Add fusion strategy info for tracking
         "fusion_strategy": args.fusion_strategy,
         "residual_strategy": args.residual_strategy,
+        # Loss function configuration
+        "loss_type": args.loss_type,
+        "focal_alpha": args.focal_alpha,
+        "focal_gamma": args.focal_gamma,
     }
     if model is not None:
         # Initialize trainer
+        print("🏋️‍♂️ Initializing trainer...")
         logger.info("Initializing trainer...")
         trainer = DatasetTrainer(model, train_loader, test_loader, test_loader, configs, wb=True, logger=logger, verbose=args.verbose)
+        
         # Start training
+        print("🚀 Starting training process...")
         trainer.train()
+        print("🎉 Training completed successfully!")
         logger.info("Training completed successfully!")
     else:
         logger.error("Model creation failed!")

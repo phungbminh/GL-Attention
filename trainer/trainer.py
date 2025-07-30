@@ -11,12 +11,13 @@ from torch.optim.lr_scheduler import (
     CosineAnnealingWarmRestarts,
     LambdaLR
 )
-import tqdm
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 import wandb  # Import wandb for logging
 import csv
 import math
 from utils.logger import get_logger
+from utils.losses import FocalLoss, get_loss_function
 
 class EarlyStopping:
     """
@@ -87,7 +88,7 @@ class DatasetTrainer(Trainer):
         # Optimizer, Scheduler, and Loss
         self.optimizer = self._initialize_optimizer()
         self.scheduler = self._initialize_scheduler()
-        self.criterion = nn.CrossEntropyLoss().to(self.device)
+        self.criterion = self._initialize_loss().to(self.device)
 
         # Checkpoint and Logging
         self.start_time = datetime.datetime.now()
@@ -175,7 +176,7 @@ class DatasetTrainer(Trainer):
             return LambdaLR(self.optimizer, lr_lambda)
         elif sched == "ReduceLROnPlateau":
             return ReduceLROnPlateau(self.optimizer, patience=5,
-                                     factor=0.1, min_lr=self.min_lr, verbose=True)
+                                     factor=0.1, min_lr=self.min_lr)
         elif sched == "StepLR":
             return StepLR(self.optimizer, step_size=10, gamma=0.1)
         elif sched == "CosineAnnealingLR":
@@ -184,15 +185,33 @@ class DatasetTrainer(Trainer):
         elif sched == "CosineAnnealingWarmRestarts":
             return CosineAnnealingWarmRestarts(
                 self.optimizer, T_0=10, T_mult=2,
-                eta_min=self.min_lr, verbose=True
+                eta_min=self.min_lr
             )
         else:
             print("No learning rate scheduler selected.")
-            return None
+
+    def _initialize_loss(self):
+        """Initialize loss function based on configuration."""
+        loss_type = self.configs.get("loss_type", "cross_entropy")
+        
+        if loss_type == "focal":
+            alpha = self.configs.get("focal_alpha", 0.25)
+            gamma = self.configs.get("focal_gamma", 2.0)
+            return FocalLoss(alpha=alpha, gamma=gamma)
+        elif loss_type == "cross_entropy":
+            return nn.CrossEntropyLoss()
+        else:
+            self.logger.warning(f"Unknown loss type: {loss_type}, using CrossEntropyLoss")
+            return nn.CrossEntropyLoss()
 
     def _initialize_wandb(self):
         """Initialize WandB."""
-        wandb.login(key=self.configs["wandb_api_key"])
+        api_key = self.configs.get("wandb_api_key", "")
+        if not api_key or len(api_key) != 40:
+            self.logger.warning("Invalid WandB API key, disabling WandB logging")
+            self.wb = False
+            return
+        wandb.login(key=api_key)
         wandb.init(
             project=self.configs["project_name"],
             name=self.configs.get("run_name", f"run_{datetime.datetime.now()}"),
@@ -213,12 +232,30 @@ class DatasetTrainer(Trainer):
         if abs(current_lr - self.previous_lr) > 1e-8:
             self.logger.log_lr_change(self.previous_lr, current_lr, "scheduler")
             self.previous_lr = current_lr
+            
+        # Show waiting message for first epoch
+        if epoch == 1:
+            print("⏳ Loading first batch (may take 30-60 seconds on CPU)...")
+            print("💡 Tip: Use GPU or reduce --batch_size for faster training")
+            first_batch_start = time.time()
 
-        for batch_idx, (images, labels) in tqdm.tqdm(
-                enumerate(self.train_loader),
-                total=len(self.train_loader),
-                desc=f"Epoch {epoch}/{self.max_epochs} [Training]",
-                leave=False):
+        pbar = tqdm(
+            enumerate(self.train_loader),
+            total=len(self.train_loader),
+            desc=f"Epoch {epoch}/{self.max_epochs} [Training]",
+            leave=False,
+            ncols=100
+        )
+        
+        for batch_idx, (images, labels) in pbar:
+            # Show message for first batch
+            if epoch == 1 and batch_idx == 0:
+                if 'first_batch_start' in locals():
+                    load_time = time.time() - first_batch_start
+                    print(f"✅ First batch loaded in {load_time:.1f}s! Training started...")
+                else:
+                    print("✅ First batch loaded successfully! Training started...")
+                
             images, labels = images.to(self.device), labels.to(self.device)
 
             # Forward pass
@@ -242,6 +279,13 @@ class DatasetTrainer(Trainer):
             batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
             current_lr = self.optimizer.param_groups[0]['lr']
             
+            # Update progress bar with current metrics
+            pbar.set_postfix({
+                'Loss': f'{batch_loss:.4f}',
+                'Acc': f'{batch_acc:.1f}%',
+                'LR': f'{current_lr:.2e}'
+            })
+            
             self.logger.log_batch(epoch, batch_idx, len(self.train_loader), 
                                 batch_loss, batch_acc, current_lr, phase="train", verbose=self.verbose)
 
@@ -262,11 +306,15 @@ class DatasetTrainer(Trainer):
         total = 0
 
         with torch.no_grad():
-            for batch_idx, (images, labels) in tqdm.tqdm(
-                    enumerate(self.val_loader),
-                    total=len(self.val_loader),
-                    desc=f"Epoch {epoch}/{self.max_epochs} [Validation]",
-                    leave=False):
+            val_pbar = tqdm(
+                enumerate(self.val_loader),
+                total=len(self.val_loader),
+                desc=f"Epoch {epoch}/{self.max_epochs} [Validation]",
+                leave=False,
+                ncols=100
+            )
+            
+            for batch_idx, (images, labels) in val_pbar:
                 images, labels = images.to(self.device), labels.to(self.device)
 
                 # Forward pass
@@ -278,10 +326,15 @@ class DatasetTrainer(Trainer):
                 total += labels.size(0)
                 correct += predicted.eq(labels).sum().item()
                 
-                # Log batch-level metrics for validation
+                # Update validation progress bar
                 batch_loss = loss.item()
                 batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
                 current_lr = self.optimizer.param_groups[0]['lr']
+                
+                val_pbar.set_postfix({
+                    'Loss': f'{batch_loss:.4f}',
+                    'Acc': f'{batch_acc:.1f}%'
+                })
                 
                 self.logger.log_batch(epoch, batch_idx, len(self.val_loader), 
                                     batch_loss, batch_acc, current_lr, phase="val", verbose=self.verbose)
@@ -303,14 +356,24 @@ class DatasetTrainer(Trainer):
         total = 0
 
         with torch.no_grad():
-            for images, labels in tqdm.tqdm(
-                    self.test_loader, total=len(self.test_loader), desc="Testing"):
+            test_pbar = tqdm(
+                self.test_loader, 
+                total=len(self.test_loader), 
+                desc="Testing Final Model",
+                ncols=100
+            )
+            
+            for images, labels in test_pbar:
                 images, labels = images.to(self.device), labels.to(self.device)
 
                 outputs = self.model(images)
                 _, predicted = outputs.max(1)
                 total += labels.size(0)
                 correct += predicted.eq(labels).sum().item()
+                
+                # Update test progress bar
+                current_acc = 100.0 * correct / total
+                test_pbar.set_postfix({'Accuracy': f'{current_acc:.2f}%'})
 
         accuracy = 100.0 * correct / total
 
@@ -328,15 +391,57 @@ class DatasetTrainer(Trainer):
         
         # Log training start
         self.logger.log_training_start(self.max_epochs, self.optimizer, self.scheduler)
+        
+        # Show initialization progress
+        print("🚀 Initializing training components...")
+        init_pbar = tqdm(total=4, desc="Training Setup", ncols=80)
+        
+        init_pbar.set_description("Setting up data loaders...")
+        init_pbar.update(1)
+        
+        init_pbar.set_description("Preparing model for training...")
+        init_pbar.update(1)
+        
+        init_pbar.set_description("Initializing optimizer & scheduler...")
+        init_pbar.update(1)
+        
+        init_pbar.set_description("Starting training loop...")
+        init_pbar.update(1)
+        init_pbar.close()
+        
+        print("✅ Setup complete! Starting training...\n")
         training_start_time = time.time()
 
         early_stopper = EarlyStopping(patience=self.early_stopping_patience)
 
-        for epoch in range(1, self.max_epochs + 1):
+        # Training loop with overall progress
+        epoch_pbar = tqdm(
+            range(1, self.max_epochs + 1),
+            desc="Training Progress",
+            ncols=120,
+            position=0
+        )
+        
+        for epoch in epoch_pbar:
             epoch_start_time = time.time()
             
             # Log epoch start
             self.logger.log_epoch_start(epoch, self.max_epochs)
+            
+            # Show data loading preparation
+            if epoch == 1:
+                print("📊 Preparing first batch (this may take a moment)...")
+                data_prep_pbar = tqdm(total=3, desc="Data Preparation", ncols=80, leave=False)
+                
+                data_prep_pbar.set_description("Loading first batch...")
+                data_prep_pbar.update(1)
+                
+                data_prep_pbar.set_description("Applying transforms...")
+                data_prep_pbar.update(1)
+                
+                data_prep_pbar.set_description("Moving to device...")
+                data_prep_pbar.update(1)
+                data_prep_pbar.close()
             
             # Train and validate
             train_loss, train_acc = self.train_one_epoch(epoch)
@@ -344,6 +449,15 @@ class DatasetTrainer(Trainer):
             
             # Calculate epoch time
             epoch_time = time.time() - epoch_start_time
+            
+            # Update overall progress bar
+            epoch_pbar.set_postfix({
+                'Train Loss': f'{train_loss:.4f}',
+                'Train Acc': f'{train_acc:.1f}%',
+                'Val Loss': f'{val_loss:.4f}', 
+                'Val Acc': f'{val_acc:.1f}%',
+                'Best': f'{self.best_val_acc:.1f}%'
+            })
             
             # Append training history
             train_hist["loss"].append(train_loss)
