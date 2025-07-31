@@ -244,11 +244,11 @@ class DatasetTrainer(Trainer):
             total=len(self.train_loader),
             desc=f"Epoch {epoch}/{self.max_epochs} [Training]",
             leave=False,
-            ncols=140 if self.verbose else 100,
-            disable=False,  # Always show progress bar
-            dynamic_ncols=True,
-            mininterval=0.5,  # Update every 0.5 seconds minimum
-            maxinterval=2.0   # Update every 2 seconds maximum
+            ncols=100,
+            disable=self.verbose,  # Disable progress bar in verbose mode
+            dynamic_ncols=False,
+            mininterval=1.0,
+            maxinterval=10.0
         )
         
         for batch_idx, (images, labels) in pbar:
@@ -259,6 +259,11 @@ class DatasetTrainer(Trainer):
                     print(f"First batch loaded in {load_time:.1f}s! Training started...")
                 else:
                     print("First batch loaded successfully! Training started...")
+            
+            # Simple progress indicator for verbose mode
+            if self.verbose and batch_idx > 0 and (batch_idx % 100 == 0 or batch_idx == len(self.train_loader) - 1):
+                progress = (batch_idx + 1) / len(self.train_loader) * 100
+                print(f"  Training progress: {batch_idx+1}/{len(self.train_loader)} ({progress:.1f}%)")
                 
             images, labels = images.to(self.device), labels.to(self.device)
 
@@ -302,6 +307,9 @@ class DatasetTrainer(Trainer):
         # Print summary for verbose mode
         if self.verbose:
             print(f"  Training - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%, LR: {current_lr:.2e}")
+        else:
+            # Clear progress bar line for normal mode
+            pass
 
         # Log to WandB
         if self.wb:
@@ -322,14 +330,19 @@ class DatasetTrainer(Trainer):
                 total=len(self.val_loader),
                 desc=f"Epoch {epoch}/{self.max_epochs} [Validation]",
                 leave=False,
-                ncols=140 if self.verbose else 100,
-                disable=False,  # Always show progress bar
-                dynamic_ncols=True,
-                mininterval=0.5,  # Update every 0.5 seconds minimum
-                maxinterval=2.0   # Update every 2 seconds maximum
+                ncols=100,
+                disable=self.verbose,  # Disable progress bar in verbose mode
+                dynamic_ncols=False,
+                mininterval=1.0,
+                maxinterval=10.0
             )
             
             for batch_idx, (images, labels) in val_pbar:
+                # Simple progress indicator for verbose mode
+                if self.verbose and batch_idx > 0 and (batch_idx % 50 == 0 or batch_idx == len(self.val_loader) - 1):
+                    progress = (batch_idx + 1) / len(self.val_loader) * 100
+                    print(f"  Validation progress: {batch_idx+1}/{len(self.val_loader)} ({progress:.1f}%)")
+                    
                 images, labels = images.to(self.device), labels.to(self.device)
 
                 # Forward pass
