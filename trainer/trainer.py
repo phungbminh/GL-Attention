@@ -235,8 +235,6 @@ class DatasetTrainer(Trainer):
             
         # Show waiting message for first epoch
         if epoch == 1:
-            print("Loading first batch (may take 30-60 seconds on CPU)...")
-            print("Tip: Use GPU or reduce --batch_size for faster training")
             first_batch_start = time.time()
 
         pbar = tqdm(
@@ -458,8 +456,9 @@ class DatasetTrainer(Trainer):
         for epoch in epochs:
             epoch_start_time = time.time()
             
-            # Log epoch start
-            self.logger.log_epoch_start(epoch, self.max_epochs)
+            # Skip verbose epoch start/end logging in verbose mode
+            if not self.verbose:
+                self.logger.log_epoch_start(epoch, self.max_epochs)
             
             # Show data loading preparation
             if epoch == 1:
@@ -511,8 +510,8 @@ class DatasetTrainer(Trainer):
             if abs(old_lr - new_lr) > 1e-8:
                 self.logger.log_lr_change(old_lr, new_lr, "scheduler")
             
-            # Log epoch summary
-            self.logger.log_epoch_end(epoch, train_loss, train_acc, val_loss, val_acc, new_lr, epoch_time)
+            # Log epoch summary in one line
+            self.logger.info(f"Epoch {epoch:2d}/{self.max_epochs} | Train Loss: {train_loss:.4f}, Acc: {train_acc:.2f}% | Val Loss: {val_loss:.4f}, Acc: {val_acc:.2f}% | LR: {new_lr:.6f} | Time: {epoch_time:.1f}s")
             
             # Write to CSV log
             with open(self.csv_log_path, mode='a', newline='') as file:
@@ -530,12 +529,14 @@ class DatasetTrainer(Trainer):
             if val_acc > self.best_val_acc:
                 self.best_val_acc = val_acc
                 torch.save(self.model.state_dict(), self.checkpoint_path)
-                self.logger.log_checkpoint_save(epoch, self.checkpoint_path, val_acc)
+                if not self.verbose:
+                    self.logger.log_checkpoint_save(epoch, self.checkpoint_path, val_acc)
                 
             # Early stopping check
             early_stopper(val_acc)
             if early_stopper.early_stop:
-                self.logger.log_early_stopping(epoch, self.early_stopping_patience)
+                if not self.verbose:
+                    self.logger.log_early_stopping(epoch, self.early_stopping_patience)
                 break
 
         # Calculate total training time
