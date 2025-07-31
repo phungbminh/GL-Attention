@@ -260,10 +260,7 @@ class DatasetTrainer(Trainer):
                 else:
                     print("First batch loaded successfully! Training started...")
             
-            # Simple progress indicator for verbose mode
-            if self.verbose and batch_idx > 0 and (batch_idx % 100 == 0 or batch_idx == len(self.train_loader) - 1):
-                progress = (batch_idx + 1) / len(self.train_loader) * 100
-                print(f"  Training progress: {batch_idx+1}/{len(self.train_loader)} ({progress:.1f}%)")
+            # No batch progress indicators in verbose mode
                 
             images, labels = images.to(self.device), labels.to(self.device)
 
@@ -338,10 +335,7 @@ class DatasetTrainer(Trainer):
             )
             
             for batch_idx, (images, labels) in val_pbar:
-                # Simple progress indicator for verbose mode
-                if self.verbose and batch_idx > 0 and (batch_idx % 50 == 0 or batch_idx == len(self.val_loader) - 1):
-                    progress = (batch_idx + 1) / len(self.val_loader) * 100
-                    print(f"  Validation progress: {batch_idx+1}/{len(self.val_loader)} ({progress:.1f}%)")
+                # No batch progress indicators in verbose mode
                     
                 images, labels = images.to(self.device), labels.to(self.device)
 
