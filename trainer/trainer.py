@@ -299,12 +299,7 @@ class DatasetTrainer(Trainer):
         avg_loss = running_loss / len(self.train_loader)
         accuracy = 100.0 * correct / total
 
-        # Print summary for verbose mode
-        if self.verbose:
-            print(f"  Training - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%, LR: {current_lr:.2e}")
-        else:
-            # Clear progress bar line for normal mode
-            pass
+        # Skip training summary in verbose mode
 
         # Log to WandB
         if self.wb:
@@ -366,9 +361,7 @@ class DatasetTrainer(Trainer):
         avg_loss = val_loss / len(self.val_loader)
         accuracy = 100.0 * correct / total
 
-        # Print summary for verbose mode
-        if self.verbose:
-            print(f"  Validation - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%")
+        # Skip validation summary in verbose mode
 
         # Log to WandB
         if self.wb:
