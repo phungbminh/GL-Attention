@@ -245,7 +245,10 @@ class DatasetTrainer(Trainer):
             desc=f"Epoch {epoch}/{self.max_epochs} [Training]",
             leave=False,
             ncols=140 if self.verbose else 100,
-            disable=False  # Always show progress bar
+            disable=False,  # Always show progress bar
+            dynamic_ncols=True,
+            mininterval=0.5,  # Update every 0.5 seconds minimum
+            maxinterval=2.0   # Update every 2 seconds maximum
         )
         
         for batch_idx, (images, labels) in pbar:
@@ -280,30 +283,25 @@ class DatasetTrainer(Trainer):
             batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
             current_lr = self.optimizer.param_groups[0]['lr']
             
-            # Update progress bar with current metrics (throttled to avoid spam)
-            if batch_idx % 5 == 0 or batch_idx == len(self.train_loader) - 1:
-                if self.verbose:
-                    # Verbose mode: show detailed info with shorter keys
-                    pbar.set_postfix({
-                        'L': f'{batch_loss:.4f}',
-                        'A': f'{batch_acc:.1f}%',
-                        'AvgL': f'{running_loss/(batch_idx+1):.4f}',
-                        'AvgA': f'{100.0*correct/total:.1f}%',
-                        'LR': f'{current_lr:.1e}'
-                    })
-                else:
-                    # Normal mode: compact info
-                    pbar.set_postfix({
-                        'Loss': f'{batch_loss:.4f}',
-                        'Acc': f'{batch_acc:.1f}%',
-                        'LR': f'{current_lr:.2e}'
-                    })
+            # Update progress bar with current metrics
+            if not self.verbose:
+                # Only update postfix in normal mode
+                pbar.set_postfix({
+                    'Loss': f'{batch_loss:.4f}',
+                    'Acc': f'{batch_acc:.1f}%',
+                    'LR': f'{current_lr:.2e}'
+                })
+            # Verbose mode: No postfix updates to avoid spam
             
             self.logger.log_batch(epoch, batch_idx, len(self.train_loader), 
                                 batch_loss, batch_acc, current_lr, phase="train", verbose=self.verbose)
 
         avg_loss = running_loss / len(self.train_loader)
         accuracy = 100.0 * correct / total
+
+        # Print summary for verbose mode
+        if self.verbose:
+            print(f"  Training - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%, LR: {current_lr:.2e}")
 
         # Log to WandB
         if self.wb:
@@ -325,7 +323,10 @@ class DatasetTrainer(Trainer):
                 desc=f"Epoch {epoch}/{self.max_epochs} [Validation]",
                 leave=False,
                 ncols=140 if self.verbose else 100,
-                disable=False  # Always show progress bar
+                disable=False,  # Always show progress bar
+                dynamic_ncols=True,
+                mininterval=0.5,  # Update every 0.5 seconds minimum
+                maxinterval=2.0   # Update every 2 seconds maximum
             )
             
             for batch_idx, (images, labels) in val_pbar:
@@ -345,28 +346,24 @@ class DatasetTrainer(Trainer):
                 batch_acc = 100.0 * predicted.eq(labels).sum().item() / labels.size(0)
                 current_lr = self.optimizer.param_groups[0]['lr']
                 
-                # Update validation progress bar (throttled to avoid spam)
-                if batch_idx % 5 == 0 or batch_idx == len(self.val_loader) - 1:
-                    if self.verbose:
-                        # Verbose mode: show detailed info with shorter keys
-                        val_pbar.set_postfix({
-                            'L': f'{batch_loss:.4f}',
-                            'A': f'{batch_acc:.1f}%',
-                            'AvgL': f'{val_loss/(batch_idx+1):.4f}',
-                            'AvgA': f'{100.0*correct/total:.1f}%'
-                        })
-                    else:
-                        # Normal mode: compact info
-                        val_pbar.set_postfix({
-                            'Loss': f'{batch_loss:.4f}',
-                            'Acc': f'{batch_acc:.1f}%'
-                        })
+                # Update validation progress bar
+                if not self.verbose:
+                    # Only update postfix in normal mode
+                    val_pbar.set_postfix({
+                        'Loss': f'{batch_loss:.4f}',
+                        'Acc': f'{batch_acc:.1f}%'
+                    })
+                # Verbose mode: No postfix updates to avoid spam
                 
                 self.logger.log_batch(epoch, batch_idx, len(self.val_loader), 
                                     batch_loss, batch_acc, current_lr, phase="val", verbose=self.verbose)
 
         avg_loss = val_loss / len(self.val_loader)
         accuracy = 100.0 * correct / total
+
+        # Print summary for verbose mode
+        if self.verbose:
+            print(f"  Validation - Loss: {avg_loss:.4f}, Accuracy: {accuracy:.2f}%")
 
         # Log to WandB
         if self.wb:
