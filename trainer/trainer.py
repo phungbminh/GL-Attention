@@ -245,7 +245,7 @@ class DatasetTrainer(Trainer):
             desc=f"Epoch {epoch}/{self.max_epochs} [Training]",
             leave=False,
             ncols=100,
-            disable=self.verbose,  # Disable progress bar in verbose mode
+            disable=False,  # Always show epoch progress bar
             dynamic_ncols=False,
             mininterval=1.0,
             maxinterval=10.0
@@ -328,7 +328,7 @@ class DatasetTrainer(Trainer):
                 desc=f"Epoch {epoch}/{self.max_epochs} [Validation]",
                 leave=False,
                 ncols=100,
-                disable=self.verbose,  # Disable progress bar in verbose mode
+                disable=False,  # Always show epoch progress bar
                 dynamic_ncols=False,
                 mininterval=1.0,
                 maxinterval=10.0
@@ -444,15 +444,18 @@ class DatasetTrainer(Trainer):
 
         early_stopper = EarlyStopping(patience=self.early_stopping_patience)
 
-        # Training loop with overall progress
-        epoch_pbar = tqdm(
-            range(1, self.max_epochs + 1),
-            desc="Training Progress",
-            ncols=120,
-            position=0
-        )
+        # Training loop without overall progress in verbose mode
+        if self.verbose:
+            epochs = range(1, self.max_epochs + 1)
+        else:
+            epochs = tqdm(
+                range(1, self.max_epochs + 1),
+                desc="Training Progress",
+                ncols=120,
+                position=0
+            )
         
-        for epoch in epoch_pbar:
+        for epoch in epochs:
             epoch_start_time = time.time()
             
             # Log epoch start
@@ -480,14 +483,15 @@ class DatasetTrainer(Trainer):
             # Calculate epoch time
             epoch_time = time.time() - epoch_start_time
             
-            # Update overall progress bar
-            epoch_pbar.set_postfix({
-                'Train Loss': f'{train_loss:.4f}',
-                'Train Acc': f'{train_acc:.1f}%',
-                'Val Loss': f'{val_loss:.4f}', 
-                'Val Acc': f'{val_acc:.1f}%',
-                'Best': f'{self.best_val_acc:.1f}%'
-            })
+            # Update overall progress bar (only in normal mode)
+            if not self.verbose:
+                epochs.set_postfix({
+                    'Train Loss': f'{train_loss:.4f}',
+                    'Train Acc': f'{train_acc:.1f}%',
+                    'Val Loss': f'{val_loss:.4f}', 
+                    'Val Acc': f'{val_acc:.1f}%',
+                    'Best': f'{self.best_val_acc:.1f}%'
+                })
             
             # Append training history
             train_hist["loss"].append(train_loss)
